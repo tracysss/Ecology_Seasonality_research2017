@@ -1,0 +1,3 @@
+sas c:\myProgram.sas C:/Users/zjuni/fakeDir\file1.txt
+sas c:\myProgram.sas C:/Users/zjuni/fakeDir\file2.txt
+sas c:\myProgram.sas C:/Users/zjuni/fakeDir\file3.txt

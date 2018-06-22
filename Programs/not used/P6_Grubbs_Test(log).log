@@ -1,0 +1,3558 @@
+3501
+3502  /* This program is apply Grubb's Test.               */
+3503  /*              (2015 Data)                          */
+3504  /* Date: 09/14/2016       By : TS                    */
+3505
+3506  /************ATTENTION!**************************/
+3507  /* Change these macro values                    */
+3508  %Let dsname = us_ha1_1991;       * This dataset already has clearday flag;
+3509  %Let Begin_Year = '2000';
+3510  %Let End_Year = '2000';
+3511  %let Year =2000;
+3512  %Let modelvar=GPP;
+3513  /************************************************/
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+3514  TITLE1 "2015 Flux Daily Files : &dsname., Year: &Year";
+3515
+3516
+3517  /* store output sas dataset files in this directory */
+3518  LIBNAME flux2015 'C:\Users\tnsongbr\Google Drive\Phenoflux_work\2015';
+NOTE: Libref FLUX2015 was successfully assigned as follows:
+      Engine:        V9
+      Physical Name: C:\Users\tnsongbr\Google Drive\Phenoflux_work\2015
+3519
+3520
+3521  /* store ODS output file in this directory */
+3522  ods pdf file = "C:\Users\tnsongbr\Google
+3522! Drive\Phenoflux_work\2015\Grubbs_&dsname._&Year..pdf";
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+NOTE: Writing ODS PDF output to DISK destination
+      "C:\Users\tnsongbr\Google Drive\Phenoflux_work\2015\Grubbs_us_ha1_1991_2000.pdf",
+      printer "PDF".
+3523
+3524  options MLOGIC SYMBOLGEN;
+3525
+3526
+3527
+3528  /*prepare data for Gubbs' test: only take 1 year, both Spring and Fall */
+3529
+3530  /* Grubb's Test iteration - initialized to 1 */
+3531  %let gi=1;
+3532
+3533  %let noutlier_s=1;
+3534  %let noutlier_f=1;
+3535  /*prepare data for Gubbs' test: only take 1 year, both Spring and Fall */
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 1
+3536  data flux2015.&dsname._2_&Year._&gi;
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+3537      set flux2015.&dsname._1new;
+3538      gpp_ratio1f = GPP_NT_VUT_REF
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+3538!                                  /predf_&modelvar;
+3539      gpp_ratio1s = GPP_NT_VUT_REF
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+3539!                                  /preds_&modelvar;
+3540      where (yyyy = "&Year") /*and GPP_NT_VUT_REF>=0*/;   /* and (doy>=100 and doy<=265);*/
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+3541      keep yyyy doy GPP_NT_VUT_REF   preds_&modelvar gpp_ratio1s predf_&modelvar gpp_ratio1f
+3541!  Spring Fall;
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+3542  run;
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      180 at 3538:34   147 at 3539:34
+NOTE: There were 366 observations read from the data set FLUX2015.US_HA1_1991_1NEW.
+      WHERE yyyy='2000';
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_1 has 366 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+3543
+3544  /* Calculate Critical Grubbs Values - both Spring and Fall*/
+3545  %macro grubbs_crit(alpha=0.5, num_s=, num_f=,ds=);
+3546      data &ds;
+3547          t2_s=tinv(&alpha/(2*&num_s), &num_s -2);
+3548          /*Critical (95%) Two-sided Grubbs Multiplier (Spring)*/
+3549          gcrit2_s = ((&num_s -1) / sqrt(&num_s)) * sqrt(t2_s * t2_s/(&num_s -2 + t2_s *
+3549! t2_s));
+3550          %let gcv_s=gcrit2_s;
+3551
+3552          /*nobs_s=&num_s;*/
+3553
+3554          t2_f=tinv(&alpha/(2*&num_f), &num_f -2);
+3555          /* Critical (95%) Two-sided Grubbs Multiplier (Fall)*/
+3556          gcrit2_f = ((&num_f -1) / sqrt(&num_f)) * sqrt(t2_f * t2_f/(&num_f -2 + t2_f *
+3556! t2_f));
+3557          %let gcv_f=gcrit2_f;
+3558
+3559          /*nobs_s=&num_s;*/
+3560      run;
+3561  %mend grubbs_crit;
+3562
+3563  /******************* Start of Grubbs Test **********************/
+3564  /* Grubb's Test will conclude when Numbers of Outliers(both */
+3565  /* Spring and Fall) are zeroes.                             */
+3566  %Macro Grubbs;
+3567  /**** Beginning of one iteration ***/
+3568  %do %until ((&noutlier_s=0 and &noutlier_f=0) or &gi>100);
+3569  title2 "Grubb's Test Iteration &gi";
+3570  %put "**********New Grubb's Iteration Begins *************";
+3571  %put "Grubb's Test Iteration. gi=" &gi;
+3572  %put "Number of outliers from last iteration(noutlier_s,noutlier_f):" &noutlier_s
+3572! &noutlier_f;
+3573
+3574  /* get num_rows of testing dataset */
+3575  proc sql noprint;
+3576      select count(*) into : nobs_s
+3577      from flux2015.&dsname._2_&Year._&gi
+3578      where Spring = 1;
+3579
+3580     select count(*) into : nobs_f
+3581     from flux2015.&dsname._2_&Year._&gi
+3582      where Fall = 1;
+3583  quit;
+3584  %put "Obs (Spring) in data set:" &nobs_s;
+3585  %put "Obs (Fall) in data set:" &nobs_f;
+3586
+3587
+3588
+3589  /* run Macro to calculate Grubb's critical value */
+3590  %grubbs_crit(num_s=&nobs_s, num_f=&nobs_f, ds=Grubbs_test)
+3591
+3592
+3593  /* Calculate mean and sd */
+3594  proc means data=flux2015.&dsname._2_&Year._&gi;
+3595      var gpp_ratio1s gpp_ratio1f;
+3596      output out=meanratio mean=mean_r_s mean_r_f stddev=sds sdf ;
+3597  run;
+3598
+3599  /* merge mean and sd to main data */
+3600  data meanratio;
+3601      set meanratio;
+3602      yyyy = put(&Year, $4.);
+3603      drop _TYPE_ _FREQ_;
+3604  run;
+3605  proc sql;
+3606      create table flux2015.&dsname._3_&Year._&gi as
+3607      select * from
+3608          flux2015.&dsname._2_&Year._&gi ds ,meanratio m
+3609      where ds.yyyy = m.yyyy;
+3610  quit;
+3611
+3612  /* Calculate G */
+3613  data _null_;
+3614      set Grubbs_test;
+3615      /* Get Grubb's Test Critical Value from macro dataset*/
+3616      call symput("gcrit2_s",gcrit2_s);
+3617      call symput("gcrit2_f",gcrit2_f);
+3618  run;
+3619  %put &gcrit2_s;
+3620  %put &gcrit2_f;
+3621  /* identify outliers */
+3622  data flux2015.&dsname._3_&Year._&gi;
+3623      set flux2015.&dsname._3_&Year._&gi;
+3624      G_s = abs(gpp_ratio1s - mean_r_s) / sds;
+3625      G_f = abs(gpp_ratio1f - mean_r_f) / sdf;
+3626      C_s = &gcrit2_s;
+3627      C_f = &gcrit2_f;
+3628      Diff_s = G_s - C_s;
+3629      Diff_f = G_f - C_f;
+3630      if Diff_s >= 0 then Outlier_s = 1; else Outlier_s = 0;
+3631      if Diff_f >= 0 then Outlier_f = 1; else Outlier_f = 0;
+3632  run;
+3633  /* How many outliers? */
+3634  proc freq data=flux2015.&dsname._3_&Year._&gi;
+3635      table Outlier_s /  out=outliercount_s;
+3636      table Outlier_f /  out=outliercount_f;
+3637      /*table Outlier_s Outlier_f; */
+3638  run;
+3639  proc sql noprint;
+3640      select count(*) into : noutlier_s
+3641      from flux2015.&dsname._3_&Year._&gi
+3642      where Outlier_s = 1;
+3643
+3644     select count(*) into : noutlier_f
+3645     from flux2015.&dsname._3_&Year._&gi
+3646      where Outlier_f = 1;;
+3647  quit;
+3648  %put 'Obs (Spring) in data set:' &noutlier_s;
+3649  %put 'Obs (Fall) in data set:' &noutlier_f;
+3650
+3651
+3652  proc gplot data=flux2015.&dsname._3_&Year._&gi;
+3653  *by yyyy;
+3654      *plot (GPP_NT_VUT_REF pred_GPP)*doy / overlay;
+3655      plot gpp_ratio1s * doy=Outlier_s /*vaxis=-5 to 5*/;
+3656      plot gpp_ratio1f * doy=Outlier_f /*vaxis=-5 to 5*/;
+3657      plot GPP_NT_VUT_REF * doy=Outlier_s /*vaxis=-5 to 5*/;
+3658      plot GPP_NT_VUT_REF * doy=Outlier_f /*vaxis=-5 to 5*/;
+3659  run;
+3660  /* remove outliers */
+3661  %let gi_new=%SYSEVALF(&gi+1);
+3662
+3663  %put "creating new dataset:" &gi &gi_new;
+3664
+3665
+3666  proc sql;
+3667      create table flux2015.&dsname._3_&Year._&gi_new as
+3668      select * from
+3669          flux2015.&dsname._3_&Year._&gi ds ,meanratio m
+3670      where ds.Outlier_s=0 and ds.Outlier_f=0;
+3671  quit;
+3672  data flux2015.&dsname._2_&Year._&gi_new;
+3673      set flux2015.&dsname._3_&Year._&gi_new;
+3674      keep GPP_NT_VUT_REF yyyy doy Spring Fall preds_&modelvar
+3675          predf_&modelvar gpp_ratio1s gpp_ratio1f;
+3676  run;
+3677
+3678
+3679  %put "*****************End of iteration. gi=" &gi "************************";
+3680
+3681  %let gi=%SYSEVALF(&gi+1);
+3682
+3683
+3684  %end; /* end of Grubbs' test iteration */
+3685
+3686  %mend; * end of Macro Grubbs;
+3687
+3688
+3689  %grubbs;
+MLOGIC(GRUBBS):  Beginning execution.
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) loop beginning.
+SYMBOLGEN:  Macro variable GI resolves to 1
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 1
+"Grubb's Test Iteration. gi=" 1
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to 1
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to 1
+"Number of outliers from last iteration(noutlier_s,noutlier_f):" 1 1
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 1
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 1
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      219
+"Obs (Spring) in data set:"      219
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      186
+"Obs (Fall) in data set:"      186
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      219
+SYMBOLGEN:  Macro variable NOBS_F resolves to      186
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 219
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 186
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 219
+SYMBOLGEN:  Macro variable NUM_S resolves to 219
+SYMBOLGEN:  Macro variable NUM_S resolves to 219
+SYMBOLGEN:  Macro variable NUM_S resolves to 219
+SYMBOLGEN:  Macro variable NUM_S resolves to 219
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 186
+SYMBOLGEN:  Macro variable NUM_F resolves to 186
+SYMBOLGEN:  Macro variable NUM_F resolves to 186
+SYMBOLGEN:  Macro variable NUM_F resolves to 186
+SYMBOLGEN:  Macro variable NUM_F resolves to 186
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 1
+
+NOTE: Writing HTML Body file: sashtml7.htm
+NOTE: There were 366 observations read from the data set FLUX2015.US_HA1_1991_2_2000_1.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.21 seconds
+      cpu time            0.17 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 1
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 1
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_1.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_1 created, with 366 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      7:47   7:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 3.0217026903
+3.0217026903
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.9689132581
+2.9689132581
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 1
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 1
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 3.0217026903
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.9689132581
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      147 at 11384:90    147 at 11384:106   147 at 11384:118   180 at 11384:135
+      180 at 11384:151   180 at 11384:163   147 at 11384:229   180 at 11384:253
+NOTE: There were 366 observations read from the data set FLUX2015.US_HA1_1991_3_2000_1.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_1 has 366 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 1
+
+NOTE: There were 366 observations read from the data set FLUX2015.US_HA1_1991_3_2000_1.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 2 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 2 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.04 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 1
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 1
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        8
+'Obs (Spring) in data set:'        8
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        7
+'Obs (Fall) in data set:'        7
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 1
+
+NOTE: 147 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 180 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 147 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 180 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 17616 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot260.png.
+NOTE: 16973 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot261.png.
+NOTE: 21918 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot262.png.
+NOTE: 21876 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot263.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 1
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 1
+SYMBOLGEN:  Macro variable GI_NEW resolves to 2
+"creating new dataset:" 1 2
+
+NOTE: There were 366 observations read from the data set FLUX2015.US_HA1_1991_3_2000_1.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.59 seconds
+      cpu time            0.57 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 2
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 1
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_2.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_2.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_2.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_2.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_2.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_2 created, with 351 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 2
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 2
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 351 observations read from the data set FLUX2015.US_HA1_1991_3_2000_2.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_2 has 351 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 1
+"*****************End of iteration. gi=" 1 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 1
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        8
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        7
+SYMBOLGEN:  Macro variable GI resolves to 2
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) condition is FALSE;
+      loop will iterate again.
+SYMBOLGEN:  Macro variable GI resolves to 2
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 2
+"Grubb's Test Iteration. gi=" 2
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        8
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        7
+"Number of outliers from last iteration(noutlier_s,noutlier_f):"        8        7
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 2
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 2
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      211
+"Obs (Spring) in data set:"      211
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      179
+"Obs (Fall) in data set:"      179
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      211
+SYMBOLGEN:  Macro variable NOBS_F resolves to      179
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 211
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 179
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 211
+SYMBOLGEN:  Macro variable NUM_S resolves to 211
+SYMBOLGEN:  Macro variable NUM_S resolves to 211
+SYMBOLGEN:  Macro variable NUM_S resolves to 211
+SYMBOLGEN:  Macro variable NUM_S resolves to 211
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 179
+SYMBOLGEN:  Macro variable NUM_F resolves to 179
+SYMBOLGEN:  Macro variable NUM_F resolves to 179
+SYMBOLGEN:  Macro variable NUM_F resolves to 179
+SYMBOLGEN:  Macro variable NUM_F resolves to 179
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 2
+
+NOTE: There were 351 observations read from the data set FLUX2015.US_HA1_1991_2_2000_2.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 2
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 2
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_2.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_2 created, with 351 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      27:47   27:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 3.0097635422
+3.0097635422
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.9563653058
+2.9563653058
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 2
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 2
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 3.0097635422
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.9563653058
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      140 at 11481:90    140 at 11481:106   140 at 11481:118   172 at 11481:135
+      172 at 11481:151   172 at 11481:163   140 at 11481:229   172 at 11481:253
+NOTE: There were 351 observations read from the data set FLUX2015.US_HA1_1991_3_2000_2.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_2 has 351 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 2
+
+NOTE: There were 351 observations read from the data set FLUX2015.US_HA1_1991_3_2000_2.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 2 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 2 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.04 seconds
+      cpu time            0.03 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 2
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 2
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        3
+'Obs (Spring) in data set:'        3
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        6
+'Obs (Fall) in data set:'        6
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 2
+
+NOTE: 140 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 172 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 140 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 172 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 19661 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot264.png.
+NOTE: 18759 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot265.png.
+NOTE: 21788 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot266.png.
+NOTE: 21746 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot267.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 2
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 2
+SYMBOLGEN:  Macro variable GI_NEW resolves to 3
+"creating new dataset:" 2 3
+
+NOTE: There were 351 observations read from the data set FLUX2015.US_HA1_1991_3_2000_2.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.59 seconds
+      cpu time            0.50 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 3
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 2
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_3.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_3.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_3.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_3.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_3.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_3 created, with 342 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 3
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 3
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 342 observations read from the data set FLUX2015.US_HA1_1991_3_2000_3.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_3 has 342 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 2
+"*****************End of iteration. gi=" 2 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 2
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        3
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        6
+SYMBOLGEN:  Macro variable GI resolves to 3
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) condition is FALSE;
+      loop will iterate again.
+SYMBOLGEN:  Macro variable GI resolves to 3
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 3
+"Grubb's Test Iteration. gi=" 3
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        3
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        6
+"Number of outliers from last iteration(noutlier_s,noutlier_f):"        3        6
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 3
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 3
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      208
+"Obs (Spring) in data set:"      208
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      173
+"Obs (Fall) in data set:"      173
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      208
+SYMBOLGEN:  Macro variable NOBS_F resolves to      173
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 208
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 173
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 208
+SYMBOLGEN:  Macro variable NUM_S resolves to 208
+SYMBOLGEN:  Macro variable NUM_S resolves to 208
+SYMBOLGEN:  Macro variable NUM_S resolves to 208
+SYMBOLGEN:  Macro variable NUM_S resolves to 208
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 173
+SYMBOLGEN:  Macro variable NUM_F resolves to 173
+SYMBOLGEN:  Macro variable NUM_F resolves to 173
+SYMBOLGEN:  Macro variable NUM_F resolves to 173
+SYMBOLGEN:  Macro variable NUM_F resolves to 173
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 3
+
+NOTE: There were 342 observations read from the data set FLUX2015.US_HA1_1991_2_2000_3.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.03 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 3
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 3
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_3.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_3 created, with 342 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      47:47   47:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 3.0051554514
+3.0051554514
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.9451642464
+2.9451642464
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 3
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 3
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 3.0051554514
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.9451642464
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      134 at 11578:90    134 at 11578:106   134 at 11578:118   169 at 11578:135
+      169 at 11578:151   169 at 11578:163   134 at 11578:229   169 at 11578:253
+NOTE: There were 342 observations read from the data set FLUX2015.US_HA1_1991_3_2000_3.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_3 has 342 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 3
+
+NOTE: There were 342 observations read from the data set FLUX2015.US_HA1_1991_3_2000_3.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 2 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 2 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.04 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 3
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 3
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        4
+'Obs (Spring) in data set:'        4
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        7
+'Obs (Fall) in data set:'        7
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 3
+
+NOTE: 134 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 169 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 134 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 169 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 18192 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot268.png.
+NOTE: 17336 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot269.png.
+NOTE: 21787 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot270.png.
+NOTE: 21757 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot271.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 3
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 3
+SYMBOLGEN:  Macro variable GI_NEW resolves to 4
+"creating new dataset:" 3 4
+
+NOTE: There were 342 observations read from the data set FLUX2015.US_HA1_1991_3_2000_3.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.57 seconds
+      cpu time            0.51 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 4
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 3
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_4.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_4.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_4.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_4.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_4.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_4 created, with 331 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 4
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 4
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 331 observations read from the data set FLUX2015.US_HA1_1991_3_2000_4.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_4 has 331 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 3
+"*****************End of iteration. gi=" 3 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 3
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        4
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        7
+SYMBOLGEN:  Macro variable GI resolves to 4
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) condition is FALSE;
+      loop will iterate again.
+SYMBOLGEN:  Macro variable GI resolves to 4
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 4
+"Grubb's Test Iteration. gi=" 4
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        4
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        7
+"Number of outliers from last iteration(noutlier_s,noutlier_f):"        4        7
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 4
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 4
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      204
+"Obs (Spring) in data set:"      204
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      166
+"Obs (Fall) in data set:"      166
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      204
+SYMBOLGEN:  Macro variable NOBS_F resolves to      166
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 204
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 166
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 204
+SYMBOLGEN:  Macro variable NUM_S resolves to 204
+SYMBOLGEN:  Macro variable NUM_S resolves to 204
+SYMBOLGEN:  Macro variable NUM_S resolves to 204
+SYMBOLGEN:  Macro variable NUM_S resolves to 204
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 166
+SYMBOLGEN:  Macro variable NUM_F resolves to 166
+SYMBOLGEN:  Macro variable NUM_F resolves to 166
+SYMBOLGEN:  Macro variable NUM_F resolves to 166
+SYMBOLGEN:  Macro variable NUM_F resolves to 166
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 4
+
+NOTE: There were 331 observations read from the data set FLUX2015.US_HA1_1991_2_2000_4.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 4
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 4
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_4.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_4 created, with 331 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      67:47   67:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to   2.99889449
+2.99889449
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.9315324437
+2.9315324437
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 4
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 4
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to   2.99889449
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.9315324437
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      127 at 11675:90    127 at 11675:106   127 at 11675:118   165 at 11675:135
+      165 at 11675:151   165 at 11675:163   127 at 11675:229   165 at 11675:253
+NOTE: There were 331 observations read from the data set FLUX2015.US_HA1_1991_3_2000_4.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_4 has 331 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 4
+
+NOTE: There were 331 observations read from the data set FLUX2015.US_HA1_1991_3_2000_4.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 2 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 2 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.04 seconds
+      cpu time            0.03 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 4
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 4
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        4
+'Obs (Spring) in data set:'        4
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        6
+'Obs (Fall) in data set:'        6
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 4
+
+NOTE: 127 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 165 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 127 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 165 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 17816 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot272.png.
+NOTE: 16756 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot273.png.
+NOTE: 21518 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot274.png.
+NOTE: 21432 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot275.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 4
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 4
+SYMBOLGEN:  Macro variable GI_NEW resolves to 5
+"creating new dataset:" 4 5
+
+NOTE: There were 331 observations read from the data set FLUX2015.US_HA1_1991_3_2000_4.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.58 seconds
+      cpu time            0.48 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 5
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 4
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_5.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_5.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_5.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_5.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_5.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_5 created, with 321 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 5
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 5
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 321 observations read from the data set FLUX2015.US_HA1_1991_3_2000_5.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_5 has 321 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 4
+"*****************End of iteration. gi=" 4 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 4
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        4
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        6
+SYMBOLGEN:  Macro variable GI resolves to 5
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) condition is FALSE;
+      loop will iterate again.
+SYMBOLGEN:  Macro variable GI resolves to 5
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 5
+"Grubb's Test Iteration. gi=" 5
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        4
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        6
+"Number of outliers from last iteration(noutlier_s,noutlier_f):"        4        6
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 5
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 5
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      200
+"Obs (Spring) in data set:"      200
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      160
+"Obs (Fall) in data set:"      160
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      200
+SYMBOLGEN:  Macro variable NOBS_F resolves to      160
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 200
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 160
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 200
+SYMBOLGEN:  Macro variable NUM_S resolves to 200
+SYMBOLGEN:  Macro variable NUM_S resolves to 200
+SYMBOLGEN:  Macro variable NUM_S resolves to 200
+SYMBOLGEN:  Macro variable NUM_S resolves to 200
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 160
+SYMBOLGEN:  Macro variable NUM_F resolves to 160
+SYMBOLGEN:  Macro variable NUM_F resolves to 160
+SYMBOLGEN:  Macro variable NUM_F resolves to 160
+SYMBOLGEN:  Macro variable NUM_F resolves to 160
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 5
+
+NOTE: There were 321 observations read from the data set FLUX2015.US_HA1_1991_2_2000_5.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 5
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 5
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_5.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_5 created, with 321 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      87:47   87:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9924948071
+2.9924948071
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.9193244068
+2.9193244068
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 5
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 5
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9924948071
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.9193244068
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      121 at 11772:90    121 at 11772:106   121 at 11772:118   161 at 11772:135
+      161 at 11772:151   161 at 11772:163   121 at 11772:229   161 at 11772:253
+NOTE: There were 321 observations read from the data set FLUX2015.US_HA1_1991_3_2000_5.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_5 has 321 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 5
+
+NOTE: There were 321 observations read from the data set FLUX2015.US_HA1_1991_3_2000_5.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 2 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 2 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.04 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 5
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 5
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        6
+'Obs (Spring) in data set:'        6
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        6
+'Obs (Fall) in data set:'        6
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 5
+
+NOTE: 121 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 161 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 121 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 161 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 17895 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot276.png.
+NOTE: 16602 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot277.png.
+NOTE: 21594 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot278.png.
+NOTE: 21488 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot279.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 5
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 5
+SYMBOLGEN:  Macro variable GI_NEW resolves to 6
+"creating new dataset:" 5 6
+
+NOTE: There were 321 observations read from the data set FLUX2015.US_HA1_1991_3_2000_5.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.59 seconds
+      cpu time            0.53 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 6
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 5
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_6.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_6.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_6.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_6.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_6.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_6 created, with 309 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 6
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 6
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 309 observations read from the data set FLUX2015.US_HA1_1991_3_2000_6.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_6 has 309 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 5
+"*****************End of iteration. gi=" 5 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 5
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        6
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        6
+SYMBOLGEN:  Macro variable GI resolves to 6
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) condition is FALSE;
+      loop will iterate again.
+SYMBOLGEN:  Macro variable GI resolves to 6
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 6
+"Grubb's Test Iteration. gi=" 6
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        6
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        6
+"Number of outliers from last iteration(noutlier_s,noutlier_f):"        6        6
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 6
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 6
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      194
+"Obs (Spring) in data set:"      194
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      154
+"Obs (Fall) in data set:"      154
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      194
+SYMBOLGEN:  Macro variable NOBS_F resolves to      154
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 194
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 154
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 194
+SYMBOLGEN:  Macro variable NUM_S resolves to 194
+SYMBOLGEN:  Macro variable NUM_S resolves to 194
+SYMBOLGEN:  Macro variable NUM_S resolves to 194
+SYMBOLGEN:  Macro variable NUM_S resolves to 194
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 154
+SYMBOLGEN:  Macro variable NUM_F resolves to 154
+SYMBOLGEN:  Macro variable NUM_F resolves to 154
+SYMBOLGEN:  Macro variable NUM_F resolves to 154
+SYMBOLGEN:  Macro variable NUM_F resolves to 154
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 6
+
+NOTE: There were 309 observations read from the data set FLUX2015.US_HA1_1991_2_2000_6.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 6
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 6
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_6.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_6 created, with 309 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      107:47   107:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9826219508
+2.9826219508
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.9065911458
+2.9065911458
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 6
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 6
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9826219508
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.9065911458
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      115 at 11869:90    115 at 11869:106   115 at 11869:118   155 at 11869:135
+      155 at 11869:151   155 at 11869:163   115 at 11869:229   155 at 11869:253
+NOTE: There were 309 observations read from the data set FLUX2015.US_HA1_1991_3_2000_6.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_6 has 309 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 6
+
+NOTE: There were 309 observations read from the data set FLUX2015.US_HA1_1991_3_2000_6.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 2 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 2 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.04 seconds
+      cpu time            0.04 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 6
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 6
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        7
+'Obs (Spring) in data set:'        7
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        5
+'Obs (Fall) in data set:'        5
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 6
+
+NOTE: 115 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 155 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 115 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 155 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 17705 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot280.png.
+NOTE: 16421 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot281.png.
+NOTE: 21228 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot282.png.
+NOTE: 21086 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot283.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 6
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 6
+SYMBOLGEN:  Macro variable GI_NEW resolves to 7
+"creating new dataset:" 6 7
+
+NOTE: There were 309 observations read from the data set FLUX2015.US_HA1_1991_3_2000_6.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.58 seconds
+      cpu time            0.51 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 7
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 6
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_7.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_7.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_7.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_7.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_7.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_7 created, with 297 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 7
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 7
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 297 observations read from the data set FLUX2015.US_HA1_1991_3_2000_7.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_7 has 297 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 6
+"*****************End of iteration. gi=" 6 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 6
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        7
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        5
+SYMBOLGEN:  Macro variable GI resolves to 7
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) condition is FALSE;
+      loop will iterate again.
+SYMBOLGEN:  Macro variable GI resolves to 7
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 7
+"Grubb's Test Iteration. gi=" 7
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        7
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        5
+"Number of outliers from last iteration(noutlier_s,noutlier_f):"        7        5
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 7
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 7
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      187
+"Obs (Spring) in data set:"      187
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      149
+"Obs (Fall) in data set:"      149
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      187
+SYMBOLGEN:  Macro variable NOBS_F resolves to      149
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 187
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 149
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 187
+SYMBOLGEN:  Macro variable NUM_S resolves to 187
+SYMBOLGEN:  Macro variable NUM_S resolves to 187
+SYMBOLGEN:  Macro variable NUM_S resolves to 187
+SYMBOLGEN:  Macro variable NUM_S resolves to 187
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 149
+SYMBOLGEN:  Macro variable NUM_F resolves to 149
+SYMBOLGEN:  Macro variable NUM_F resolves to 149
+SYMBOLGEN:  Macro variable NUM_F resolves to 149
+SYMBOLGEN:  Macro variable NUM_F resolves to 149
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 7
+
+NOTE: There were 297 observations read from the data set FLUX2015.US_HA1_1991_2_2000_7.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 7
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 7
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_7.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_7 created, with 297 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      127:47   127:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9706625757
+2.9706625757
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8955466913
+2.8955466913
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 7
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 7
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9706625757
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8955466913
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      110 at 11966:90    110 at 11966:106   110 at 11966:118   148 at 11966:135
+      148 at 11966:151   148 at 11966:163   110 at 11966:229   148 at 11966:253
+NOTE: There were 297 observations read from the data set FLUX2015.US_HA1_1991_3_2000_7.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_7 has 297 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 7
+
+NOTE: There were 297 observations read from the data set FLUX2015.US_HA1_1991_3_2000_7.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 2 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 2 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.04 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 7
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 7
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        3
+'Obs (Spring) in data set:'        3
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        2
+'Obs (Fall) in data set:'        2
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 7
+
+NOTE: 110 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 148 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 110 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 148 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 17502 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot284.png.
+NOTE: 16236 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot285.png.
+NOTE: 20963 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot286.png.
+NOTE: 20851 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot287.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 7
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 7
+SYMBOLGEN:  Macro variable GI_NEW resolves to 8
+"creating new dataset:" 7 8
+
+NOTE: There were 297 observations read from the data set FLUX2015.US_HA1_1991_3_2000_7.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.58 seconds
+      cpu time            0.48 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 8
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 7
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_8.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_8.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_8.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_8.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_8.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_8 created, with 292 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 8
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 8
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 292 observations read from the data set FLUX2015.US_HA1_1991_3_2000_8.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_8 has 292 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 7
+"*****************End of iteration. gi=" 7 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 7
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        3
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        2
+SYMBOLGEN:  Macro variable GI resolves to 8
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) condition is FALSE;
+      loop will iterate again.
+SYMBOLGEN:  Macro variable GI resolves to 8
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 8
+"Grubb's Test Iteration. gi=" 8
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        3
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        2
+"Number of outliers from last iteration(noutlier_s,noutlier_f):"        3        2
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 8
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 8
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      184
+"Obs (Spring) in data set:"      184
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      147
+"Obs (Fall) in data set:"      147
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      184
+SYMBOLGEN:  Macro variable NOBS_F resolves to      147
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 184
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 147
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 184
+SYMBOLGEN:  Macro variable NUM_S resolves to 184
+SYMBOLGEN:  Macro variable NUM_S resolves to 184
+SYMBOLGEN:  Macro variable NUM_S resolves to 184
+SYMBOLGEN:  Macro variable NUM_S resolves to 184
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 147
+SYMBOLGEN:  Macro variable NUM_F resolves to 147
+SYMBOLGEN:  Macro variable NUM_F resolves to 147
+SYMBOLGEN:  Macro variable NUM_F resolves to 147
+SYMBOLGEN:  Macro variable NUM_F resolves to 147
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 8
+
+NOTE: There were 292 observations read from the data set FLUX2015.US_HA1_1991_2_2000_8.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.03 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 8
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 8
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_8.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_8 created, with 292 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      147:47   147:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9653828161
+2.9653828161
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8910116919
+2.8910116919
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 8
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 8
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9653828161
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8910116919
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      108 at 12063:90    108 at 12063:106   108 at 12063:118   145 at 12063:135
+      145 at 12063:151   145 at 12063:163   108 at 12063:229   145 at 12063:253
+NOTE: There were 292 observations read from the data set FLUX2015.US_HA1_1991_3_2000_8.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_8 has 292 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 8
+
+NOTE: There were 292 observations read from the data set FLUX2015.US_HA1_1991_3_2000_8.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 2 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 2 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 8
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 8
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        3
+'Obs (Spring) in data set:'        3
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        3
+'Obs (Fall) in data set:'        3
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 8
+
+NOTE: 108 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 145 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 108 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 145 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 17202 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot288.png.
+NOTE: 16276 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot289.png.
+NOTE: 21021 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot290.png.
+NOTE: 20931 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot291.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 8
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 8
+SYMBOLGEN:  Macro variable GI_NEW resolves to 9
+"creating new dataset:" 8 9
+
+NOTE: There were 292 observations read from the data set FLUX2015.US_HA1_1991_3_2000_8.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.58 seconds
+      cpu time            0.48 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 9
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 8
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_9.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_9.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_9.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_9.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_9.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_9 created, with 286 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 9
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 9
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 286 observations read from the data set FLUX2015.US_HA1_1991_3_2000_9.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_9 has 286 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 8
+"*****************End of iteration. gi=" 8 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 8
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        3
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        3
+SYMBOLGEN:  Macro variable GI resolves to 9
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) condition is FALSE;
+      loop will iterate again.
+SYMBOLGEN:  Macro variable GI resolves to 9
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 9
+"Grubb's Test Iteration. gi=" 9
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        3
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        3
+"Number of outliers from last iteration(noutlier_s,noutlier_f):"        3        3
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 9
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 9
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      181
+"Obs (Spring) in data set:"      181
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      144
+"Obs (Fall) in data set:"      144
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      181
+SYMBOLGEN:  Macro variable NOBS_F resolves to      144
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 181
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 144
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 181
+SYMBOLGEN:  Macro variable NUM_S resolves to 181
+SYMBOLGEN:  Macro variable NUM_S resolves to 181
+SYMBOLGEN:  Macro variable NUM_S resolves to 181
+SYMBOLGEN:  Macro variable NUM_S resolves to 181
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 9
+
+NOTE: There were 286 observations read from the data set FLUX2015.US_HA1_1991_2_2000_9.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 9
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 9
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_9.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_9 created, with 286 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      167:47   167:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9600057673
+2.9600057673
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8840774256
+2.8840774256
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 9
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 9
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9600057673
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8840774256
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      105 at 12160:90    105 at 12160:106   105 at 12160:118   142 at 12160:135
+      142 at 12160:151   142 at 12160:163   105 at 12160:229   142 at 12160:253
+NOTE: There were 286 observations read from the data set FLUX2015.US_HA1_1991_3_2000_9.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_9 has 286 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 9
+
+NOTE: There were 286 observations read from the data set FLUX2015.US_HA1_1991_3_2000_9.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 2 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 1 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 9
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 9
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        4
+'Obs (Spring) in data set:'        4
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+'Obs (Fall) in data set:'        0
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 9
+
+NOTE: 105 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 142 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 105 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 142 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 17148 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot292.png.
+NOTE: 21528 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot293.png.
+NOTE: 20940 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot294.png.
+NOTE: 20694 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot295.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 9
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 9
+SYMBOLGEN:  Macro variable GI_NEW resolves to 10
+"creating new dataset:" 9 10
+
+NOTE: There were 286 observations read from the data set FLUX2015.US_HA1_1991_3_2000_9.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.53 seconds
+      cpu time            0.51 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 10
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 9
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_10.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_10.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_10.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_10.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_10.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_10 created, with 282 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 10
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 10
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 282 observations read from the data set FLUX2015.US_HA1_1991_3_2000_10.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_10 has 282 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 9
+"*****************End of iteration. gi=" 9 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 9
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        4
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+SYMBOLGEN:  Macro variable GI resolves to 10
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) condition is FALSE;
+      loop will iterate again.
+SYMBOLGEN:  Macro variable GI resolves to 10
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 10
+"Grubb's Test Iteration. gi=" 10
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        4
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+"Number of outliers from last iteration(noutlier_s,noutlier_f):"        4        0
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 10
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 10
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      177
+"Obs (Spring) in data set:"      177
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      144
+"Obs (Fall) in data set:"      144
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      177
+SYMBOLGEN:  Macro variable NOBS_F resolves to      144
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 177
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 144
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 177
+SYMBOLGEN:  Macro variable NUM_S resolves to 177
+SYMBOLGEN:  Macro variable NUM_S resolves to 177
+SYMBOLGEN:  Macro variable NUM_S resolves to 177
+SYMBOLGEN:  Macro variable NUM_S resolves to 177
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 10
+
+NOTE: There were 282 observations read from the data set FLUX2015.US_HA1_1991_2_2000_10.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 10
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 10
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_10.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_10 created, with 282 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      187:47   187:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9526789828
+2.9526789828
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8840774256
+2.8840774256
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 10
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 10
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9526789828
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8840774256
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      105 at 12257:90    105 at 12257:106   105 at 12257:118   138 at 12257:135
+      138 at 12257:151   138 at 12257:163   105 at 12257:229   138 at 12257:253
+NOTE: There were 282 observations read from the data set FLUX2015.US_HA1_1991_3_2000_10.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_10 has 282 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 10
+
+NOTE: There were 282 observations read from the data set FLUX2015.US_HA1_1991_3_2000_10.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 2 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 1 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.03 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 10
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 10
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        4
+'Obs (Spring) in data set:'        4
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+'Obs (Fall) in data set:'        0
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 10
+
+NOTE: 105 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 138 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 105 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 138 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 17145 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot296.png.
+NOTE: 21612 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot297.png.
+NOTE: 20994 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot298.png.
+NOTE: 20746 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot299.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 10
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 10
+SYMBOLGEN:  Macro variable GI_NEW resolves to 11
+"creating new dataset:" 10 11
+
+NOTE: There were 282 observations read from the data set FLUX2015.US_HA1_1991_3_2000_10.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.55 seconds
+      cpu time            0.50 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 11
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 10
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_11.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_11.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_11.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_11.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_11.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_11 created, with 278 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 11
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 11
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 278 observations read from the data set FLUX2015.US_HA1_1991_3_2000_11.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_11 has 278 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 10
+"*****************End of iteration. gi=" 10 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 10
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        4
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+SYMBOLGEN:  Macro variable GI resolves to 11
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) condition is FALSE;
+      loop will iterate again.
+SYMBOLGEN:  Macro variable GI resolves to 11
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 11
+"Grubb's Test Iteration. gi=" 11
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        4
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+"Number of outliers from last iteration(noutlier_s,noutlier_f):"        4        0
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 11
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 11
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      173
+"Obs (Spring) in data set:"      173
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      144
+"Obs (Fall) in data set:"      144
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      173
+SYMBOLGEN:  Macro variable NOBS_F resolves to      144
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 173
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 144
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 173
+SYMBOLGEN:  Macro variable NUM_S resolves to 173
+SYMBOLGEN:  Macro variable NUM_S resolves to 173
+SYMBOLGEN:  Macro variable NUM_S resolves to 173
+SYMBOLGEN:  Macro variable NUM_S resolves to 173
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 11
+
+NOTE: There were 278 observations read from the data set FLUX2015.US_HA1_1991_2_2000_11.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 11
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 11
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_11.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_11 created, with 278 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      207:47   207:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9451642464
+2.9451642464
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8840774256
+2.8840774256
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 11
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 11
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9451642464
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8840774256
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      105 at 12354:90    105 at 12354:106   105 at 12354:118   134 at 12354:135
+      134 at 12354:151   134 at 12354:163   105 at 12354:229   134 at 12354:253
+NOTE: There were 278 observations read from the data set FLUX2015.US_HA1_1991_3_2000_11.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_11 has 278 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 11
+
+NOTE: There were 278 observations read from the data set FLUX2015.US_HA1_1991_3_2000_11.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 2 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 1 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.04 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 11
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 11
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        3
+'Obs (Spring) in data set:'        3
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+'Obs (Fall) in data set:'        0
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 11
+
+NOTE: 105 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 134 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 105 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 134 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 16592 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot300.png.
+NOTE: 21393 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot301.png.
+NOTE: 20713 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot302.png.
+NOTE: 20474 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot303.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 11
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 11
+SYMBOLGEN:  Macro variable GI_NEW resolves to 12
+"creating new dataset:" 11 12
+
+NOTE: There were 278 observations read from the data set FLUX2015.US_HA1_1991_3_2000_11.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.53 seconds
+      cpu time            0.51 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 12
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 11
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_12.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_12.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_12.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_12.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_12.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_12 created, with 275 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 12
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 12
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 275 observations read from the data set FLUX2015.US_HA1_1991_3_2000_12.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_12 has 275 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 11
+"*****************End of iteration. gi=" 11 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 11
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        3
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+SYMBOLGEN:  Macro variable GI resolves to 12
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) condition is FALSE;
+      loop will iterate again.
+SYMBOLGEN:  Macro variable GI resolves to 12
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 12
+"Grubb's Test Iteration. gi=" 12
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        3
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+"Number of outliers from last iteration(noutlier_s,noutlier_f):"        3        0
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 12
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 12
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      170
+"Obs (Spring) in data set:"      170
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      144
+"Obs (Fall) in data set:"      144
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      170
+SYMBOLGEN:  Macro variable NOBS_F resolves to      144
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 170
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 144
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 170
+SYMBOLGEN:  Macro variable NUM_S resolves to 170
+SYMBOLGEN:  Macro variable NUM_S resolves to 170
+SYMBOLGEN:  Macro variable NUM_S resolves to 170
+SYMBOLGEN:  Macro variable NUM_S resolves to 170
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 12
+
+NOTE: There were 275 observations read from the data set FLUX2015.US_HA1_1991_2_2000_12.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 12
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 12
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_12.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_12 created, with 275 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      227:47   227:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9393992058
+2.9393992058
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8840774256
+2.8840774256
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 12
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 12
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9393992058
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8840774256
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      105 at 12451:90    105 at 12451:106   105 at 12451:118   131 at 12451:135
+      131 at 12451:151   131 at 12451:163   105 at 12451:229   131 at 12451:253
+NOTE: There were 275 observations read from the data set FLUX2015.US_HA1_1991_3_2000_12.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_12 has 275 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 12
+
+NOTE: There were 275 observations read from the data set FLUX2015.US_HA1_1991_3_2000_12.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 2 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 1 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.04 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 12
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 12
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        1
+'Obs (Spring) in data set:'        1
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+'Obs (Fall) in data set:'        0
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 12
+
+NOTE: 105 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 131 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 105 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 131 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 16829 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot304.png.
+NOTE: 21523 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot305.png.
+NOTE: 20785 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot306.png.
+NOTE: 20565 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot307.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 12
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 12
+SYMBOLGEN:  Macro variable GI_NEW resolves to 13
+"creating new dataset:" 12 13
+
+NOTE: There were 275 observations read from the data set FLUX2015.US_HA1_1991_3_2000_12.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.52 seconds
+      cpu time            0.50 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 13
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 12
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_13.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_13.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_13.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_13.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_13.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_13 created, with 274 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 13
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 13
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 274 observations read from the data set FLUX2015.US_HA1_1991_3_2000_13.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_13 has 274 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 12
+"*****************End of iteration. gi=" 12 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 12
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        1
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+SYMBOLGEN:  Macro variable GI resolves to 13
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) condition is FALSE;
+      loop will iterate again.
+SYMBOLGEN:  Macro variable GI resolves to 13
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 13
+"Grubb's Test Iteration. gi=" 13
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        1
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+"Number of outliers from last iteration(noutlier_s,noutlier_f):"        1        0
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 13
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 13
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      169
+"Obs (Spring) in data set:"      169
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      144
+"Obs (Fall) in data set:"      144
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      169
+SYMBOLGEN:  Macro variable NOBS_F resolves to      144
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 169
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 144
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 169
+SYMBOLGEN:  Macro variable NUM_S resolves to 169
+SYMBOLGEN:  Macro variable NUM_S resolves to 169
+SYMBOLGEN:  Macro variable NUM_S resolves to 169
+SYMBOLGEN:  Macro variable NUM_S resolves to 169
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 13
+
+NOTE: There were 274 observations read from the data set FLUX2015.US_HA1_1991_2_2000_13.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 13
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 13
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_13.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_13 created, with 274 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      247:47   247:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to  2.937452131
+2.937452131
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8840774256
+2.8840774256
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 13
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 13
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to  2.937452131
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8840774256
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      105 at 12548:90    105 at 12548:106   105 at 12548:118   130 at 12548:135
+      130 at 12548:151   130 at 12548:163   105 at 12548:229   130 at 12548:253
+NOTE: There were 274 observations read from the data set FLUX2015.US_HA1_1991_3_2000_13.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_13 has 274 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 13
+
+NOTE: There were 274 observations read from the data set FLUX2015.US_HA1_1991_3_2000_13.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 2 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 1 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.04 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 13
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 13
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        1
+'Obs (Spring) in data set:'        1
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+'Obs (Fall) in data set:'        0
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 13
+
+NOTE: 105 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 130 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 105 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 130 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 16860 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot308.png.
+NOTE: 21573 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot309.png.
+NOTE: 20828 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot310.png.
+NOTE: 20605 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot311.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 13
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 13
+SYMBOLGEN:  Macro variable GI_NEW resolves to 14
+"creating new dataset:" 13 14
+
+NOTE: There were 274 observations read from the data set FLUX2015.US_HA1_1991_3_2000_13.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.53 seconds
+      cpu time            0.50 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 14
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 13
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_14.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_14.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_14.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_14.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_14.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_14 created, with 273 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 14
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 14
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 273 observations read from the data set FLUX2015.US_HA1_1991_3_2000_14.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_14 has 273 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 13
+"*****************End of iteration. gi=" 13 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 13
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        1
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+SYMBOLGEN:  Macro variable GI resolves to 14
+MLOGIC(GRUBBS):  %DO %UNTIL((&noutlier_s=0 and &noutlier_f=0) or &gi>100) condition is FALSE;
+      loop will iterate again.
+SYMBOLGEN:  Macro variable GI resolves to 14
+MLOGIC(GRUBBS):  %PUT "**********New Grubb's Iteration Begins *************"
+"**********New Grubb's Iteration Begins *************"
+MLOGIC(GRUBBS):  %PUT "Grubb's Test Iteration. gi=" &gi
+SYMBOLGEN:  Macro variable GI resolves to 14
+"Grubb's Test Iteration. gi=" 14
+MLOGIC(GRUBBS):  %PUT "Number of outliers from last iteration(noutlier_s,noutlier_f):"
+      &noutlier_s &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        1
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+"Number of outliers from last iteration(noutlier_s,noutlier_f):"        1        0
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 14
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 14
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "Obs (Spring) in data set:" &nobs_s
+SYMBOLGEN:  Macro variable NOBS_S resolves to      168
+"Obs (Spring) in data set:"      168
+MLOGIC(GRUBBS):  %PUT "Obs (Fall) in data set:" &nobs_f
+SYMBOLGEN:  Macro variable NOBS_F resolves to      144
+"Obs (Fall) in data set:"      144
+MLOGIC(GRUBBS_CRIT):  Beginning execution.
+SYMBOLGEN:  Macro variable NOBS_S resolves to      168
+SYMBOLGEN:  Macro variable NOBS_F resolves to      144
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_S has value 168
+MLOGIC(GRUBBS_CRIT):  Parameter NUM_F has value 144
+MLOGIC(GRUBBS_CRIT):  Parameter DS has value Grubbs_test
+MLOGIC(GRUBBS_CRIT):  Parameter ALPHA has value 0.5
+SYMBOLGEN:  Macro variable DS resolves to Grubbs_test
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_S resolves to 168
+SYMBOLGEN:  Macro variable NUM_S resolves to 168
+SYMBOLGEN:  Macro variable NUM_S resolves to 168
+SYMBOLGEN:  Macro variable NUM_S resolves to 168
+SYMBOLGEN:  Macro variable NUM_S resolves to 168
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_S)
+SYMBOLGEN:  Macro variable ALPHA resolves to 0.5
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+SYMBOLGEN:  Macro variable NUM_F resolves to 144
+MLOGIC(GRUBBS_CRIT):  %LET (variable name is GCV_F)
+
+NOTE: The data set WORK.GRUBBS_TEST has 1 observations and 4 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS_CRIT):  Ending execution.
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 14
+
+NOTE: There were 273 observations read from the data set FLUX2015.US_HA1_1991_2_2000_14.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 6 variables.
+NOTE: PROCEDURE MEANS used (Total process time):
+      real time           0.02 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+WARNING: Variable 2000 has already been defined as numeric.
+
+NOTE: There were 1 observations read from the data set WORK.MEANRATIO.
+NOTE: The data set WORK.MEANRATIO has 1 observations and 5 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 14
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 14
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_14.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_14 created, with 273 rows and 13 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+
+NOTE: Numeric values have been converted to character values at the places given by:
+      (Line):(Column).
+      267:47   267:85
+NOTE: There were 1 observations read from the data set WORK.GRUBBS_TEST.
+NOTE: DATA statement used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT &gcrit2_s
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9354920901
+2.9354920901
+MLOGIC(GRUBBS):  %PUT &gcrit2_f
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8840774256
+2.8840774256
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 14
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 14
+SYMBOLGEN:  Macro variable GCRIT2_S resolves to 2.9354920901
+SYMBOLGEN:  Macro variable GCRIT2_F resolves to 2.8840774256
+
+NOTE: Missing values were generated as a result of performing an operation on missing values.
+      Each place is given by: (Number of times) at (Line):(Column).
+      105 at 12645:90    105 at 12645:106   105 at 12645:118   129 at 12645:135
+      129 at 12645:151   129 at 12645:163   105 at 12645:229   129 at 12645:253
+NOTE: There were 273 observations read from the data set FLUX2015.US_HA1_1991_3_2000_14.
+NOTE: The data set FLUX2015.US_HA1_1991_3_2000_14 has 273 observations and 21 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 14
+
+NOTE: There were 273 observations read from the data set FLUX2015.US_HA1_1991_3_2000_14.
+NOTE: The data set WORK.OUTLIERCOUNT_S has 1 observations and 3 variables.
+NOTE: The data set WORK.OUTLIERCOUNT_F has 1 observations and 3 variables.
+NOTE: PROCEDURE FREQ used (Total process time):
+      real time           0.03 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 14
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 14
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.00 seconds
+      cpu time            0.00 seconds
+
+
+MLOGIC(GRUBBS):  %PUT 'Obs (Spring) in data set:' &noutlier_s
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        0
+'Obs (Spring) in data set:'        0
+MLOGIC(GRUBBS):  %PUT 'Obs (Fall) in data set:' &noutlier_f
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+'Obs (Fall) in data set:'        0
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 14
+
+NOTE: 105 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 129 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 105 observation(s) contained a MISSING value for the gpp_ratio1s * doy = Outlier_s
+      request.
+NOTE: 129 observation(s) contained a MISSING value for the gpp_ratio1f * doy = Outlier_f
+      request.
+NOTE: 16575 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot312.png.
+NOTE: 21430 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot313.png.
+NOTE: 20557 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot314.png.
+NOTE: 20457 bytes written to C:\Users\tnsongbr\AppData\Local\Temp\SAS Temporary
+      Files\_TD9980_FORTE_\gplot315.png.
+MLOGIC(GRUBBS):  %LET (variable name is GI_NEW)
+SYMBOLGEN:  Macro variable GI resolves to 14
+MLOGIC(GRUBBS):  %PUT "creating new dataset:" &gi &gi_new
+SYMBOLGEN:  Macro variable GI resolves to 14
+SYMBOLGEN:  Macro variable GI_NEW resolves to 15
+"creating new dataset:" 14 15
+
+NOTE: There were 273 observations read from the data set FLUX2015.US_HA1_1991_3_2000_14.
+NOTE: PROCEDURE GPLOT used (Total process time):
+      real time           0.52 seconds
+      cpu time            0.48 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 15
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI resolves to 14
+NOTE: The execution of this query involves performing one or more Cartesian product joins that
+      can not be optimized.
+WARNING: Variable mean_r_s already exists on file FLUX2015.US_HA1_1991_3_2000_15.
+WARNING: Variable mean_r_f already exists on file FLUX2015.US_HA1_1991_3_2000_15.
+WARNING: Variable sds already exists on file FLUX2015.US_HA1_1991_3_2000_15.
+WARNING: Variable sdf already exists on file FLUX2015.US_HA1_1991_3_2000_15.
+WARNING: Variable yyyy already exists on file FLUX2015.US_HA1_1991_3_2000_15.
+NOTE: Table FLUX2015.US_HA1_1991_3_2000_15 created, with 273 rows and 21 columns.
+
+NOTE: PROCEDURE SQL used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 15
+SYMBOLGEN:  Macro variable DSNAME resolves to us_ha1_1991
+SYMBOLGEN:  Macro variable YEAR resolves to 2000
+SYMBOLGEN:  Macro variable GI_NEW resolves to 15
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+SYMBOLGEN:  Macro variable MODELVAR resolves to GPP
+
+NOTE: There were 273 observations read from the data set FLUX2015.US_HA1_1991_3_2000_15.
+NOTE: The data set FLUX2015.US_HA1_1991_2_2000_15 has 273 observations and 9 variables.
+NOTE: DATA statement used (Total process time):
+      real time           0.01 seconds
+      cpu time            0.01 seconds
+
+
+MLOGIC(GRUBBS):  %PUT "*****************End of iteration. gi=" &gi "************************"
+SYMBOLGEN:  Macro variable GI resolves to 14
+"*****************End of iteration. gi=" 14 "************************"
+MLOGIC(GRUBBS):  %LET (variable name is GI)
+SYMBOLGEN:  Macro variable GI resolves to 14
+SYMBOLGEN:  Macro variable NOUTLIER_S resolves to        0
+SYMBOLGEN:  Macro variable NOUTLIER_F resolves to        0
+SYMBOLGEN:  Macro variable GI resolves to 15
+MLOGIC(GRUBBS):  %DO %UNTIL() condition is TRUE; loop will not iterate again.
+MLOGIC(GRUBBS):  Ending execution.
+3690
+3691  quit;
+3692
+3693
+3694
+3695
+3696  /* close ODS */
+3697  ods pdf close;
+NOTE: ODS PDF printed 84 pages to C:\Users\tnsongbr\Google
+      Drive\Phenoflux_work\2015\Grubbs_us_ha1_1991_2000.pdf.

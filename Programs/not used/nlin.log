@@ -1,0 +1,150 @@
+63   /* proc nlin */
+64       proc nlin data=flux2015.testdata noprint method=marquardt NOHALVE;
+65           by  year;
+66
+67           parms y0=0.229 a1=11.33 a2=12.97 b1=4.22 b2=12.22 t01=155 t02=280 c1=0.30 c2=0.145;
+68
+69           bounds y0>=-5.0;  bounds y0<=15.0;
+70           bounds a1>=0;   bounds a1<=1000;
+71           bounds a2>=0;   bounds a2<=1000;
+72           bounds b1>=-5000;   bounds b1<=5000;
+73           bounds b2>=-5000;   bounds b2<=5000;
+74           bounds t01>=60; bounds t01<=200;
+75           bounds t02>=150; bounds t02<=366;
+76           bounds c1>=0.0; bounds c1<=100;
+77           bounds c2>=0.0; bounds c2<=100;
+78
+79           model gpp =y0+ (a1 / ((1+exp(-(doy-t01)/b1))**c1)) - a2 /
+79 ! ((1+exp(-(doy-t02)/b2))**c2);
+80
+81           output out=work.testdata_out
+82               parms=y0 a1 a2  b1  b2  t01  t02  c1 c2
+83               predicted=pred  r=resid l95m=l95 u95m=u95 stdi=stdi;
+84
+85       run;
+
+NOTE: DER.y0 not initialized or missing. It will be computed automatically.
+NOTE: DER.a1 not initialized or missing. It will be computed automatically.
+NOTE: DER.a2 not initialized or missing. It will be computed automatically.
+NOTE: DER.b1 not initialized or missing. It will be computed automatically.
+NOTE: DER.b2 not initialized or missing. It will be computed automatically.
+NOTE: DER.t01 not initialized or missing. It will be computed automatically.
+NOTE: DER.t02 not initialized or missing. It will be computed automatically.
+NOTE: DER.c1 not initialized or missing. It will be computed automatically.
+NOTE: DER.c2 not initialized or missing. It will be computed automatically.
+NOTE: The parameters were assigned the following names in the output data set ( parameter =
+      data set variable ):
+y0 = y0
+a1 = a1
+a2 = a2
+b1 = b1
+b2 = b2
+t01 = t01
+t02 = t02
+c1 = c1
+c2 = c2
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The above message was for the following BY group:
+      year=1991
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The above message was for the following BY group:
+      year=1992
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The (approximate) Hessian is singular.
+NOTE: The above message was for the following BY group:
+      year=1993
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+NOTE: Convergence criterion met.
+NOTE: The above message was for the following BY group:
+      year=1994
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The above message was for the following BY group:
+      year=1995
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The above message was for the following BY group:
+      year=1996
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The above message was for the following BY group:
+      year=1997
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+WARNING: The final (projected) Hessian has at least one negative eigenvalue. The second-order
+         optimality conditions are violated.
+NOTE: The (approximate) Hessian is singular.
+NOTE: The above message was for the following BY group:
+      year=1998
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The above message was for the following BY group:
+      year=1999
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The above message was for the following BY group:
+      year=2000
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+NOTE: Convergence criterion met.
+NOTE: The above message was for the following BY group:
+      year=2001
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The (approximate) Hessian is singular.
+NOTE: The above message was for the following BY group:
+      year=2002
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The above message was for the following BY group:
+      year=2003
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The (approximate) Hessian is singular.
+NOTE: The above message was for the following BY group:
+      year=2004
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: Negative model SS. Check model and initial parameters.
+NOTE: The (approximate) Hessian is singular.
+NOTE: The above message was for the following BY group:
+      year=2005
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The above message was for the following BY group:
+      year=2006
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The above message was for the following BY group:
+      year=2007
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+NOTE: Convergence criterion met.
+NOTE: The (approximate) Hessian is singular.
+NOTE: The above message was for the following BY group:
+      year=2008
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The (approximate) Hessian is singular.
+NOTE: The above message was for the following BY group:
+      year=2009
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: Negative model SS. Check model and initial parameters.
+NOTE: The above message was for the following BY group:
+      year=2010
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The above message was for the following BY group:
+      year=2011
+NOTE: PROC NLIN grid search time was  0: 0: 0.
+WARNING: PROC NLIN failed to converge.
+NOTE: The above message was for the following BY group:
+      year=2012
+NOTE: The data set WORK.TESTDATA_OUT has 8036 observations and 18 variables.
+NOTE: PROCEDURE NLIN used (Total process time):
+      real time           3.71 seconds
+      cpu time            3.70 seconds
+
+
